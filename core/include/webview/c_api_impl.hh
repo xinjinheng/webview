@@ -46,33 +46,56 @@ constexpr const webview_version_info_t library_version_info{
     WEBVIEW_VERSION_PRE_RELEASE,
     WEBVIEW_VERSION_BUILD_METADATA};
 
+// Thread-local storage for last error information
+static thread_local webview::error_info last_error;
+
 template <typename WorkFn, typename ResultFn>
-webview_error_t api_filter(WorkFn &&do_work, ResultFn &&put_result) noexcept {
+webview_error_t api_filter(WorkFn &&do_work, ResultFn &&put_result, webview::error_info *error = nullptr) noexcept {
   try {
     auto result = do_work();
     if (result.ok()) {
       put_result(result.value());
       return WEBVIEW_ERROR_OK;
     }
+    if (error) {
+      *error = result.error();
+    }
     return result.error().code();
   } catch (const exception &e) {
+    if (error) {
+      *error = e.error();
+    }
     return e.error().code();
   } catch (...) {
+    webview::error_info err_info{WEBVIEW_ERROR_UNSPECIFIED, "Unknown error occurred"};
+    if (error) {
+      *error = err_info;
+    }
     return WEBVIEW_ERROR_UNSPECIFIED;
   }
 }
 
 template <typename WorkFn>
-webview_error_t api_filter(WorkFn &&do_work) noexcept {
+webview_error_t api_filter(WorkFn &&do_work, webview::error_info *error = nullptr) noexcept {
   try {
     auto result = do_work();
     if (result.ok()) {
       return WEBVIEW_ERROR_OK;
     }
+    if (error) {
+      *error = result.error();
+    }
     return result.error().code();
   } catch (const exception &e) {
+    if (error) {
+      *error = e.error();
+    }
     return e.error().code();
   } catch (...) {
+    webview::error_info err_info{WEBVIEW_ERROR_UNSPECIFIED, "Unknown error occurred"};
+    if (error) {
+      *error = err_info;
+    }
     return WEBVIEW_ERROR_UNSPECIFIED;
   }
 }
@@ -91,14 +114,18 @@ inline webview *cast_to_webview(void *w) {
 WEBVIEW_API webview_t webview_create(int debug, void *wnd) {
   using namespace webview::detail;
   webview::webview *w{};
+  webview::error_info error;
   auto err = api_filter(
       [=]() -> webview::result<webview::webview *> {
         return new webview::webview{static_cast<bool>(debug), wnd};
       },
-      [&](webview::webview *w_) { w = w_; });
+      [&](webview::webview *w_) { w = w_; },
+      &error);
   if (err == WEBVIEW_ERROR_OK) {
+    last_error = webview::error_info{}; // Clear last error
     return w;
   }
+  last_error = error; // Save error information
   return nullptr;
 }
 
@@ -240,11 +267,18 @@ WEBVIEW_API webview_error_t webview_unbind(webview_t w, const char *name) {
   return api_filter([=] { return cast_to_webview(w)->unbind(name); });
 }
 
-WEBVIEW_API webview_error_t webview_return(webview_t w, const char *id,
-                                           int status, const char *result) {
+WEBVIEW_API webview_error_t webview_return(webview_t w, const char *id, int status, const char *result) {
   using namespace webview::detail;
-  if (!id || !result) {
+  if (!id || id[0] == '\0') {
     return WEBVIEW_ERROR_INVALID_ARGUMENT;
+  }
+  if (!result) {
+    return WEBVIEW_ERROR_INVALID_ARGUMENT;
+  }
+  // Validate JSON format (basic check)
+  if (*result != '{' && *result != '[' && *result != '"' && 
+      !isdigit(*result) && *result != 't' && *result != 'f' && *result != 'n') {
+    return WEBVIEW_ERROR_JSON_PARSE_FAILED;
   }
   return api_filter(
       [=] { return cast_to_webview(w)->resolve(id, status, result); });
@@ -252,6 +286,14 @@ WEBVIEW_API webview_error_t webview_return(webview_t w, const char *id,
 
 WEBVIEW_API const webview_version_info_t *webview_version(void) {
   return &webview::detail::library_version_info;
+}
+
+WEBVIEW_API webview_error_t webview_get_last_error_code(void) {
+  return last_error.code();
+}
+
+WEBVIEW_API const char *webview_get_last_error_message(void) {
+  return last_error.message().c_str();
 }
 
 #endif // defined(__cplusplus) && !defined(WEBVIEW_HEADER)

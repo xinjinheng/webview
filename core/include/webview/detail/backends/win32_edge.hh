@@ -455,6 +455,18 @@ protected:
     return {};
   }
 
+  noresult set_navigation_timeout_impl(int timeout_ms) override {
+    m_navigation_timeout_ms = timeout_ms;
+    // TODO: Implement timeout handling
+    return {};
+  }
+
+  noresult clear_navigation_timeout_impl() override {
+    m_navigation_timeout_ms = 0;
+    // TODO: Implement timeout clearing
+    return {};
+  }
+
   noresult set_html_impl(const std::string &html) override {
     m_webview->NavigateToString(widen_string(html).c_str());
     return {};
@@ -508,9 +520,9 @@ protected:
 
 private:
   void window_init(void *window) {
-    if (!is_webview2_available()) {
-      throw exception{WEBVIEW_ERROR_MISSING_DEPENDENCY,
-                      "WebView2 is unavailable"};
+    auto webview2_check = check_webview2_availability();
+    if (webview2_check.code != WEBVIEW_ERROR_OK) {
+      throw exception{webview2_check.code, webview2_check.message};
     }
 
     HINSTANCE hInstance = GetModuleHandle(nullptr);
@@ -830,17 +842,20 @@ private:
     }
   }
 
-  bool is_webview2_available() const noexcept {
+  error_info check_webview2_availability() const {
     LPWSTR version_info = nullptr;
     auto res = m_webview2_loader.get_available_browser_version_string(
         nullptr, &version_info);
-    // The result will be equal to HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)
-    // if the WebView2 runtime is not installed.
-    auto ok = SUCCEEDED(res) && version_info;
     if (version_info) {
       CoTaskMemFree(version_info);
     }
-    return ok;
+    if (FAILED(res)) {
+      if (res == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
+        return error_info{WEBVIEW_ERROR_WEBVIEW2_RUNTIME_MISSING, "WebView2 runtime is not installed"};
+      }
+      return error_info{WEBVIEW_ERROR_WEBVIEW2_RUNTIME_MISSING, "Failed to check WebView2 availability"};
+    }
+    return error_info{WEBVIEW_ERROR_OK, "WebView2 is available"};
   }
 
   void on_dpi_changed(int dpi) {
@@ -892,6 +907,10 @@ private:
   DWORD m_main_thread = GetCurrentThreadId();
   ICoreWebView2 *m_webview = nullptr;
   ICoreWebView2Controller *m_controller = nullptr;
+  // Navigation timeout
+  int m_navigation_timeout_ms{0};
+  HWND m_timer_hwnd{nullptr};
+  UINT_PTR m_timer_id{0};
   webview2_com_handler *m_com_handler = nullptr;
   mswebview2::loader m_webview2_loader;
   int m_dpi{};

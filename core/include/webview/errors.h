@@ -59,7 +59,23 @@ typedef enum {
   /// Signifies that something already exists.
   WEBVIEW_ERROR_DUPLICATE = 1,
   /// Signifies that something does not exist.
-  WEBVIEW_ERROR_NOT_FOUND = 2
+  WEBVIEW_ERROR_NOT_FOUND = 2,
+  /// WebView2 runtime is missing or not installed.
+  WEBVIEW_ERROR_WEBVIEW2_RUNTIME_MISSING = 3,
+  /// GTK library is not installed or not properly configured.
+  WEBVIEW_ERROR_GTK_LIBRARY_MISSING = 4,
+  /// WebKitGTK library is not installed or not properly configured.
+  WEBVIEW_ERROR_WEBKITGTK_LIBRARY_MISSING = 5,
+  /// WebKit library is not available (macOS).
+  WEBVIEW_ERROR_WEBKIT_LIBRARY_MISSING = 6,
+  /// Window handle is invalid or already destroyed.
+  WEBVIEW_ERROR_INVALID_WINDOW_HANDLE = 7,
+  /// Browser controller is invalid or not initialized.
+  WEBVIEW_ERROR_INVALID_BROWSER_CONTROLLER = 8,
+  /// JSON parsing failed.
+  WEBVIEW_ERROR_JSON_PARSE_FAILED = 9,
+  /// Duplicate callback ID detected.
+  WEBVIEW_ERROR_DUPLICATE_CALLBACK_ID = 10
 } webview_error_t;
 
 /// @}
